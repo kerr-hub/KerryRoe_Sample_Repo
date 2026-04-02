@@ -1,0 +1,1 @@
+Sample of pipeline used to generate genomic offsets and conduct landscape genomic analyses on whole genome sequences of Black Guillemots from across the North Atlantic. Steps 1-8 are bioinformatic processing and genomic offset modelling. acquire_scale_enviro.md outlines general procedure for how I obtained and scaled my environmental data.
