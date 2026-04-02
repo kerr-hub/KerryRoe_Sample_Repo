@@ -7,6 +7,8 @@ bcftools view ../FINAL.vcf.gz | vcfrandomsample -r 0.012 > subset3.vcf
 For running GF on subsets of FINAl vcf
 
 Run for each subset for siconc and o2 
+
+In R/4.5.0
 ```
 library(tidyverse)
 library(vcfR)
@@ -129,32 +131,12 @@ offsets <- calc_euclid(proj = gfTrans2, curr = gfTrans1)
 saveRDS(offsets, file = "colony_offsets_o2_ssp585.rds")
 
 ```
-Now scale using the mean and standard deviation for each SSP together so can compare them across senarios 
-```
-ssp126 <- readRDS("colony_offsets_o2_ssp126.rds")
-ssp370 <- readRDS("colony_offsets_o2_ssp370.rds")
-ssp585 <- readRDS("colony_offsets_o2_ssp585.rds")
-
-# combine to create reference distibution
-offset_all <- c(ssp126, ssp370, ssp585)
-
-mean_all <- mean(offset_all, na.rm = TRUE)
-sd_all   <- sd(offset_all, na.rm = TRUE)
-
-# standardize (z-scores)
-ssp126_z <- (ssp126 - mean_all) / sd_all
-ssp370_z <- (ssp370 - mean_all) / sd_all
-ssp585_z <- (ssp585 - mean_all) / sd_all
-
-saveRDS(ssp126_z, "z_colony_offsets_o2_ssp126.rds")
-saveRDS(ssp370_z, "z_colony_offsets_o2_ssp370.rds")
-saveRDS(ssp585_z, "z_colony_offsets_o2_ssp585.rds")
-
-
 ```
 ### Plotting 
 
-First plot offsets by range
+First plot offsets by range for SSP5-8.5
+
+In R/4.4.0
 ```
 library(ggplot2)
 library(rnaturalearth)
@@ -186,7 +168,6 @@ ggsave("range_offsets_gf_si_o2_ssp585.png", plot = a, width = 8, height = 6, uni
 ```
 For plotting colony offsets
 ```
-in R 4.4.0
 library(ggplot2)
 library(maps)
 
@@ -254,7 +235,7 @@ facet_grid(rows = vars(offset_type)) +
 ggsave("z_offsets_gf_o2.png", plot = a, width = 8, height = 6, units = "in", dpi = 600)
 
 ```
-calc_euclid.r
+calc_euclid.r function for calculating offsets
 ```
 calc_euclid <- function(proj, curr){
     #-------------------------------------------------------------------#
