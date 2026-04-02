@@ -107,7 +107,7 @@ for(i in 1:19){
 chelsascaling_df = data.frame(bioclim_id = bioclim_id, means=mean_vec, sd = sd_vec, stdev = stdev_vec, n = ns_vec)
 
 # save
-write.csv(chelsa_scaling_df,"./chelsa/chelsa_current_future_ssp126_future.csv", row.names=F)
+write.csv(chelsa_scaling_df,"./chelsa/chelsa_current_future_ssp126.csv", row.names=F)
 ```
 ### Extract data for each colony locations, scale data using scaler values. 
 ```
@@ -153,6 +153,7 @@ chelsa_future_scaled_2tp = data.frame(scale(as.matrix(chel_land_future[,c(-1,-21
 chelsa_future_scaled_2tp$colony = locs$pop_code
 
 saveRDS(chelsa_current_scaled_2tp,"chelsa_current_scaled.rds")
-saveRDS(chelsa_future_scaled_2tp,"chelsa_ssp585_scaled.rds")
+saveRDS(chelsa_future_scaled_2tp,"chelsa_ssp126_scaled.rds")
+
 
 
