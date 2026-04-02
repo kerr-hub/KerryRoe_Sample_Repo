@@ -309,7 +309,7 @@ var_env_proj_pres <- var_env_proj_pres[order(var_env_proj_pres$colony), ]
 var_env_proj_fut$colony <- factor(var_env_proj_fut$colony, levels = pop_order)
 var_env_proj_fut <- var_env_proj_fut[order(var_env_proj_fut$colony), ]
 
-# remove that three colonies since they are not included in this analysis
+# remove three colonies since they are not included in this analysis
 env_pres <- env_pres[-c(12,13,14),]
 env_fut <- env_fut[-c(12,13,14),]
 var_env_proj_pres <- var_env_proj_pres[-c(12,13,14),]
@@ -332,7 +332,7 @@ rda_offset <- genomic_offset(RDA = RDA, env_pres = env_pres, env_fut = var_env_p
 saveRDS(rda_offset, file = "offsets_FINAL_si_rda_ssp126_allsnps.rds")
 
 ```
-Colonies with population structure
+Offsets conditioning model with population structure
 #NOTE: Ran this three times once with o2, siconc, and together
 ```
 library(vegan)
@@ -394,34 +394,9 @@ rda_offset <- genomic_offset(RDA = RDA, env_pres = env_pres, env_fut = var_env_p
 
 saveRDS(rda_offset, file = "conditioned_offsets_FINAL_si_o2_rda_ssp585_allsnps.rds")
 ```
-Now scale offsets using z-score so I can compare across SSPs - did for both o2 and siconc
-```
-rda126 <- readRDS("conditioned_offsets_FINAL_si_rda_ssp126_allsnps.rds")
-rda370 <- readRDS("conditioned_offsets_FINAL_si_rda_ssp370_allsnps.rds")
-rda585 <- readRDS("conditioned_offsets_FINAL_si_rda_ssp585_allsnps.rds")
-
-rda126 <- rda126$Proj_offset_global
-rda370 <- rda370$Proj_offset_global
-rda585 <- rda585$Proj_offset_global
-
-# create reference distribution
-rda_all <- c(rda126, rda370, rda585)
-
-rda_mean <- mean(rda_all, na.rm = TRUE)
-rda_sd   <- sd(rda_all, na.rm = TRUE)
-
-# standardize
-rda126_z <- (rda126 - rda_mean) / rda_sd
-rda370_z <- (rda370 - rda_mean) / rda_sd
-rda585_z <- (rda585 - rda_mean) / rda_sd
-
-saveRDS(rda126_z, "z_conditioned_offsets_si_rda_ssp126.rds")
-saveRDS(rda370_z, "z_conditioned_offsets_si_rda_ssp370.rds")
-saveRDS(rda585_z, "z_conditioned_offsets_si_rda_ssp585.rds")
-```
 ### Plot the offsets!
 
-By range for SSP585. Have to join with coordinates from current environmental data in order to plot
+By range for SSP5-8.5. Have to join with coordinates from current environmental data in order to plot
 ```
 # r/4.4.0
 library(ggplot2)
@@ -436,7 +411,7 @@ env_pres_plot$Proj_offset_global <- all$Proj_offset_global
 # Get world map
 world <- ne_countries(scale = "medium", returnclass = "sf")
 
-# plot!!
+# plot!
 a <- ggplot() +
   geom_sf(data = world, fill = "grey90", color = "grey40", size = 0.2) +
   geom_tile(
@@ -502,86 +477,3 @@ coord_quickmap(
   
 ggsave("conditioned_RDA_o2_allsnps_585.png", plot = a, width = 8, height = 6, units = "in", dpi = 600)
 ```
-```
-library(tidyr)
-library(dplyr)
-library(ggplot2)
-library(maps)
-library(patchwork)
-
-clim.points <- read.csv("../../analysis/guillemot-colony-locations.csv")
-
-# make sure colony points are in the same order as offsets 
-pop_order <- c("COA", "COI", "GDI","ICE", "MLI", "NAI", "NFL",  "PLI", "QIK","SF", "SIG", "SOD", "GRI")
-clim.points$pop_code <- factor(clim.points$pop_code, levels = pop_order)
-clim.points <- clim.points[order(clim.points$pop_code), ]
-coords <- clim.points[, c("lat", "long")] # extract coordinates
-coords <- coords[-c(11,12,13,14),] # remove colonies not included
-
-# for z-score
-offset_1 <- readRDS("z_conditioned_offsets_si_rda_ssp126.rds")
-offset_2 <- readRDS("z_conditioned_offsets_si_rda_ssp370.rds")
-offset_3 <- readRDS("z_conditioned_offsets_si_rda_ssp585.rds")
-
-# for regular
-offset_1 <- readRDS("offsets_FINAL_o2_rda_ssp126_allsnps.rds")
-offset_2 <- readRDS("offsets_FINAL_o2_rda_ssp370_allsnps.rds")
-offset_3 <- readRDS("offsets_FINAL_o2_rda_ssp585_allsnps.rds")
-
-# for z-score
-coords$offset_1 <- offset_1
-coords$offset_2 <- offset_2
-coords$offset_3 <- offset_3
-
-# for regular
-coords$offset_1 <- offset_1$Proj_offset_global
-coords$offset_2 <- offset_2$Proj_offset_global
-coords$offset_3 <- offset_3$Proj_offset_global
-
-coords_long <- coords %>%
-  pivot_longer(
-    cols = starts_with("offset"),
-    names_to = "offset_type",
-    values_to = "offset"
-  )
-
-world <- map_data("world")
-
-a <- ggplot() +
-  geom_polygon(data = world,
-               aes(long, lat, group = group),
-               fill = "gray90",
-               colour = "gray50",
-               linewidth = 0.2) +
-  
-  geom_point(data = coords_long,
-             aes(x = long, y = lat, fill = offset),
-             shape = 21,
-             size = 4,
-             colour = "black") +
-  
-  scale_fill_viridis_c(name = "") +
-  
-  coord_quickmap(
-    xlim = c(-100, 60),
-    ylim = c(42, 80)
-  ) +
-  
-facet_grid(rows = vars(offset_type)) + 
-  
-  labs(
-    title = "",
-    x = "Longitude",
-    y = "Latitude"
-  ) +
-  
-  theme_classic() +
-  theme(
-    strip.text = element_blank(),
-    plot.title = element_text(
-      hjust = 0.5,   
-      size = 14, 
-    )
-  )
-a
-ggsave("offsets_RDA_o2.png", plot = a, width = 8, height = 6, units = "in", dpi = 600)
