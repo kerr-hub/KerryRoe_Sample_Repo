@@ -1,0 +1,272 @@
+Generate subsets of SNPs to run GF
+```
+bcftools view ../FINAL.vcf.gz | vcfrandomsample -r 0.01 > subset1.vcf
+bcftools view ../FINAL.vcf.gz | vcfrandomsample -r 0.012 > subset2.vcf
+bcftools view ../FINAL.vcf.gz | vcfrandomsample -r 0.012 > subset3.vcf
+```
+For running GF on subsets of FINAl vcf
+
+Run for each subset for siconc and o2 
+```
+library(tidyverse)
+library(vcfR)
+library(dplyr)
+library(gradientForest)
+library(vegan)
+
+pop_order <- c("COA", "COI", "GDI", "GRI", "ICE", "MLI", "NAI", "NFL",  "PLI", "QIK","SF", "SIG", "SOD")
+
+current_clim = readRDS("../chelsa_biooracle_current_scaled.rds")
+current_clim$colony <- factor(current_clim$colony, levels = pop_order)
+current_clim <- current_clim[order(current_clim$colony), ]
+current_clim <- current_clim[-c(12,13,14),]
+
+# load vcf file
+blgu_vcf = read.vcfR("./subset1.vcf.gz")
+
+# get genotype matrix from s4 object
+blgu_geno <- extract.gt(blgu_vcf, element = "GT")
+
+# grab positions and chromosomes for each site
+position1<- getPOS(blgu_vcf)
+chromosome1 <- getCHROM(blgu_vcf)
+
+# convert vcf matrix to more useable form
+G1f <- matrix(NA, nrow = nrow(blgu_geno), ncol = ncol(blgu_geno))
+G1f[blgu_geno %in% c("0/0", "0|0")] <- 0
+G1f[blgu_geno %in% c("0/1", "1/0", "1|0", "0|1")] <- 1
+G1f[blgu_geno %in% c("1/1", "1|1")] <- 2
+
+colnames(G1f) <- colnames(blgu_geno)
+
+meta = read_csv("../locs.csv") %>%
+  filter(Sample %in% colnames(blgu_geno))%>%
+  base::split(f = as.factor(.$pop.code)) %>%
+  map(pull,Sample)
+
+keep_pops <- c("COA", "COI","GDI","GRI","ICE","MLI","NAI", "NFL", "PLI","QIK","SF")
+meta <- meta[keep_pops]
+
+# get genotype averages across all pops
+geno_avgs = imap_dfc(meta,function(Sample,pop.code){
+    out = G1f[,Sample] %>%
+    rowMeans(na.rm = TRUE)/2
+    tibble(!!pop.code := out)
+    #rowwise %>%
+    #summarize(!!pop := mean(everything(),na.rm = TRUE))
+})
+
+# process average matrix for use in randomforest function
+geno_avg_t = data.frame(t(geno_avgs))
+# each SNP is labelled by its position
+colnames(geno_avg_t) = str_c(chromosome1,"_",position1)
+geno_avg_t$colony = rownames(geno_avg_t)
+
+# in case of lingering NaNs...
+geno_avg_t = geno_avg_t%>% select(where(~ !any(is.na(.))))
+
+all_data = inner_join(geno_avg_t,current_clim,by="colony")
+
+envPop <- c("CHELSA_bio01_1981.2010_V.2.1",
+    "siconc_max_1")
+genoPop = colnames(geno_avg_t_outliers)[-length(colnames(geno_avg_t_outliers))]
+
+maxLevel <- log2(0.368*1888/2) #In GF, a maximum number of splits to evaluate can be defined following the developers suggestion
+
+# run random forest!
+gf_adapt <- gradientForest(data=all_data,
+                        predictor.vars=envPop,
+                        response.vars=genoPop,
+                        corr.threshold=0.5,
+                        ntree=500,
+                        trace=T)
+                        
+saveRDS(gf_adapt, "gf_subset1.rds")
+```
+Now combine the models for each subset and marine variable (siconc and o2 and do offsets)
+```
+# for range extrapolation:
+future_clean <-readRDS("./future_ssp126_clean_cropped.rds")
+current_clean <- readRDS("./current_clean_cropped.rds")
+
+# for by colony
+future_clean <-readRDS("../chelsa_biooracle_ssp126_scaled.rds")
+current_clean <- readRDS("../chelsa_biooracle_current_scaled.rds")
+
+library(tidyverse)
+library(vcfR)
+library(dplyr)
+library(gradientForest)
+library(vegan)
+
+gf <- readRDS("gf1_o2.rds")
+
+pop_order <- c("COA", "COI", "GDI","ICE", "MLI", "NAI", "NFL",  "PLI", "QIK","SF", "SIG", "SOD", "GRI")
+
+current_clim = readRDS("../chelsa_biooracle_current_scaled.rds")
+current_clim$colony <- factor(current_clim$colony, levels = pop_order)
+current_clim <- current_clim[order(current_clim$colony), ]
+current_clim <- current_clim[-c(11,12,13,14),]
+
+future_clean <-readRDS("../chelsa_biooracle_ssp585_scaled.rds")
+current_clean <- current_clim
+# envPop <- c("CHELSA_bio01_1981.2010_V.2.1",  "siconc_max_1")
+envPop <- c("CHELSA_bio01_1981.2010_V.2.1", "o2_mean_1")
+
+colnames(future_clean) <- colnames(current_clean)
+
+future_clean$colony <- factor(future_clean$colony, levels = pop_order)
+future_clean <- future_clean[order(future_clean$colony), ]
+future_clean <- future_clean[-c(11,12,13,14),]
+
+gfTrans1 <- predict(gf,current_clean[,envPop])
+gfTrans2 <- predict(gf,future_clean[,envPop])
+
+source("calc_euclid.r")
+
+offsets <- calc_euclid(proj = gfTrans2, curr = gfTrans1)
+
+saveRDS(offsets, file = "colony_offsets_o2_ssp585.rds")
+
+```
+Now scale using the mean and standard deviation for each SSP together so can compare them across senarios 
+```
+ssp126 <- readRDS("colony_offsets_o2_ssp126.rds")
+ssp370 <- readRDS("colony_offsets_o2_ssp370.rds")
+ssp585 <- readRDS("colony_offsets_o2_ssp585.rds")
+
+# combine to create reference distibution
+offset_all <- c(ssp126, ssp370, ssp585)
+
+mean_all <- mean(offset_all, na.rm = TRUE)
+sd_all   <- sd(offset_all, na.rm = TRUE)
+
+# standardize (z-scores)
+ssp126_z <- (ssp126 - mean_all) / sd_all
+ssp370_z <- (ssp370 - mean_all) / sd_all
+ssp585_z <- (ssp585 - mean_all) / sd_all
+
+saveRDS(ssp126_z, "z_colony_offsets_o2_ssp126.rds")
+saveRDS(ssp370_z, "z_colony_offsets_o2_ssp370.rds")
+saveRDS(ssp585_z, "z_colony_offsets_o2_ssp585.rds")
+
+
+```
+### Plotting 
+
+First plot offsets by range
+```
+library(ggplot2)
+library(rnaturalearth)
+library(sf)
+
+env_pres <- readRDS("../current_13_clean_cropped.rds")
+current_clean <- env_pres
+offsets <- readRDS("./range_offset_gf_si_o2.rds")
+current_clean$offsets <- offsets
+
+# Get world map
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+a <- ggplot() +
+  geom_sf(data = world, fill = "grey90", color = "grey40", size = 0.2) +
+  geom_tile(
+    data = current_clean,
+    aes(x = x, y = y, fill = offsets)
+  ) +  coord_sf(
+    xlim = range(current_clean$x, na.rm = TRUE),
+    ylim = range(current_clean$y, na.rm = TRUE),
+    expand = FALSE
+  ) +
+  scale_fill_viridis_c(name = "Genomic offset", na.value = "transparent") +
+  theme_bw() +
+labs(x = "Longitude", y = "Latitude")
+
+ggsave("range_offsets_gf_si_o2_ssp585.png", plot = a, width = 8, height = 6, units = "in", dpi = 600)
+```
+For plotting colony offsets
+```
+in R 4.4.0
+library(ggplot2)
+library(maps)
+
+clim.points <- read.csv("../../analysis/guillemot-colony-locations.csv")
+
+pop_order <- c("COA", "COI", "GDI", "ICE", "MLI", "NAI", "NFL",  "PLI", "QIK","SF", "SIG", "SOD","GRI")
+clim.points$pop_code <- factor(clim.points$pop_code, levels = pop_order)
+clim.points <- clim.points[order(clim.points$pop_code), ]
+coords <- clim.points[, c("lat", "long")]
+coords <- coords[-c(11, 12,13, 14),]
+
+gf1 <- readRDS("z_colony_offsets_o2_ssp126.rds")
+gf2 <- readRDS("z_colony_offsets_o2_ssp370.rds")
+gf3 <- readRDS("z_colony_offsets_o2_ssp585.rds")
+
+coords$offset1 <- gf1
+coords$offset2 <- gf2
+coords$offset3 <- gf3
+
+coords_long <- coords %>%
+  pivot_longer(
+    cols = starts_with("offset"),
+    names_to = "offset_type",
+    values_to = "offset"
+  )
+
+world <- map_data("world")
+
+a <- ggplot() +
+  geom_polygon(data = world,
+               aes(long, lat, group = group),
+               fill = "gray90",
+               colour = "gray50",
+               linewidth = 0.2) +
+  
+  geom_point(data = coords_long,
+             aes(x = long, y = lat, fill = offset),
+             shape = 21,
+             size = 4,
+             colour = "black") +
+  
+  scale_fill_viridis_c(name = "") +
+  
+  coord_quickmap(
+    xlim = c(-100, 60),
+    ylim = c(42, 80)
+  ) +
+  
+facet_grid(rows = vars(offset_type)) + 
+  
+  labs(
+    title = "",
+    x = "Longitude",
+    y = "Latitude"
+  ) +
+  
+  theme_classic() +
+  theme(
+    strip.text = element_blank(),
+    plot.title = element_text(
+      hjust = 0.5,   
+      size = 14, 
+    )
+  )
+ggsave("z_offsets_gf_o2.png", plot = a, width = 8, height = 6, units = "in", dpi = 600)
+
+```
+calc_euclid.r
+```
+calc_euclid <- function(proj, curr){
+    #-------------------------------------------------------------------#
+    # CALCULATE EUCLIDEAN DISTANCE BETWEEN CURRENT AND PROJECTED OFFSET
+    #-------------------------------------------------------------------#
+    
+    df <- data.frame(matrix(ncol=ncol(proj), nrow=nrow(proj)))
+    stopifnot(all(colnames(proj) == colnames(curr)))
+    for (i in 1:ncol(proj)){
+        # square each difference between the column data
+        df[,i] <- (proj[,i] - curr[,i])**2
+    }
+    # sum by rows then take the square root of each
+    return (sqrt(apply(df, 1, sum)))
+}
