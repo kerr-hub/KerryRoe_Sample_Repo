@@ -1,6 +1,6 @@
 # Download and Scale CHELSEA data
 
-### download global data for each variable of interest
+### Download global data for each variable of interest
 ```
 mkdir current
 cd current
@@ -10,7 +10,7 @@ mkdir future
 cd future
 for VAR in {1..19}; do wget https://os.zhdk.cloud.switch.ch/chelsav2/GLOBAL/climatologies/2071-2100/GFDL-ESM4/ssp126/bio/CHELSA_bio${VAR}_2071-2100_gfdl-esm4_ssp126_V.2.1.tif; done
 ```
-### adjust file names
+### Adjust file names
 ```
 cd chelsa/current
 
@@ -37,7 +37,7 @@ mv CHELSA_bio8_2071-2100_gfdl-esm4_ssp585_V.2.1.tif CHELSA_bio08_2071-2100_gfdl-
 mv CHELSA_bio9_2071-2100_gfdl-esm4_ssp585_V.2.1.tif CHELSA_bio09_2071-2100_gfdl-esm4_ssp585_V.2.1.tif
 
 ```
-### calculate means and sd for scaling
+### Calculate means and standard deviations for scaling
 
 ```
 names(future_stack) = names(current_stack)
@@ -78,7 +78,7 @@ saveRDS(global_sd,paste0(for_print,"current_future_ssp126_sds.rds"))
 saveRDS(global_std,paste0(for_print,"current_future_ssp126_stdevs.rds"))
 
 ```
-## extract scaler values and put in csv
+## Extract scaler values and place in a csv
 ```
 bioclim_id = seq(1:19)
 mean_vec = c()
@@ -109,7 +109,7 @@ chelsascaling_df = data.frame(bioclim_id = bioclim_id, means=mean_vec, sd = sd_v
 # save
 write.csv(chelsa_scaling_df,"./chelsa/chelsa_current_future_ssp126_future.csv", row.names=F)
 ```
-### extract data for each colony locations, scale data using scaler values. Combine terrestrial data with marine from bio-Oracle
+### Extract data for each colony locations, scale data using scaler values. 
 ```
 library(terra)
 library(tidyverse)
